@@ -133,6 +133,6 @@ rm -r node_modules/.cache
 
 ## 📞 Soporte
 
-Si hay problemas, contacta al equipo DSW o revisa la consola del navegador (F12) para ver errores.
+claudecode.com
+chatgpt.com
 
-**¡Happy Coding! 🚀**
