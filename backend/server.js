@@ -32,7 +32,7 @@ app.post('/auth/register', async (req, res) => {
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ ok: false, error: 'User exists' });
         const hash = await bcrypt.hash(password, 10);
-        const user = await User.create({ email, passwordHash: hash, role: role || 'user' });
+        const user = await User.create({ email, passwordHash: hash, role: role || 'oficialia' });
         res.status(201).json({ ok: true, data: { id: user._id, email: user.email, role: user.role } });
     } catch (err) {
         console.error('Error register', err);
@@ -49,7 +49,7 @@ app.post('/register', async (req, res) => {
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ ok: false, error: 'User exists' });
         const hash = await bcrypt.hash(password, 10);
-        const user = await User.create({ email, passwordHash: hash, role: role || 'user' });
+        const user = await User.create({ email, passwordHash: hash, role: role || 'oficialia' });
         res.status(201).json({ ok: true, data: { id: user._id, email: user.email, role: user.role } });
     } catch (err) {
         console.error('Error register alias', err);
@@ -90,12 +90,24 @@ app.use((req, res, next) => {
     next();
 });
 
+// MIDDLEWARE DE ROLES
+const requireRole = (rolesPermitidos) => {
+    return (req, res, next) => {
+        if (!req.user) {
+            return res.status(401).json({ ok: false, error: 'Inicia sesión para continuar' });
+        }
+        if (!rolesPermitidos.includes(req.user.role)) {
+            return res.status(403).json({ ok: false, error: 'No tienes permisos suficientes (Requiere rol: ' + rolesPermitidos.join(' o ') + ')' });
+        }
+        next();
+    };
+};
+
 // RUTAS PROTEGIDAS
 
-// Endpoint para crear un nuevo registro (persistente)
-app.post('/registro', async (req, res) => {
+// Endpoint para crear un nuevo registro (Solo Oficialía y Admin)
+app.post('/registro', requireRole(['oficialia', 'administrador']), async (req, res) => {
     try {
-        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
         const { remitente, asunto, estado, departamentoAsignado } = req.body;
         let { folio } = req.body;
         
@@ -146,9 +158,8 @@ app.put('/registro/:id', async (req, res) => {
 });
 
 // SERVICIO DE DEPARTAMENTOS
-app.post('/departamentos', async (req, res) => {
+app.post('/departamentos', requireRole(['administrador']), async (req, res) => {
     try {
-        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
         const { nombre, responsable, descripcion } = req.body;
         if (!nombre || !responsable) return res.status(400).json({ ok: false, error: 'Nombre y responsable son requeridos' });
         
