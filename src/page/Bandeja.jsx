@@ -43,7 +43,7 @@ const Bandeja = () => {
                 <tr><td colSpan={5} className="p-4 text-center">No hay registros</td></tr>
               )}
               {registros.map((r) => (
-                <tr key={r.id} className="border-b">
+                <tr key={r._id} className="border-b">
                   <td className="p-2">{r.folio}</td>
                   <td className="p-2">{r.remitente}</td>
                   <td className="p-2">{r.asunto}</td>

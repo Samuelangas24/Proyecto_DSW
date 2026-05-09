@@ -4,6 +4,7 @@ require('dotenv').config();
 const mongoose = require('mongoose');
 const Registro = require('./models/Registro');
 const User = require('./models/User');
+const Departamento = require('./models/Departamento');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -21,29 +22,7 @@ app.get("/", (req, res) => {
     res.json({ mensaje: "API Oficialía DSW funcionando" });
 });
 
-// Endpoint para crear un nuevo registro (persistente)
-app.post('/registro', async (req, res) => {
-    try {
-        // require auth
-        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-        const { folio, remitente, asunto, estado } = req.body;
-        if (!folio || !remitente || !asunto) return res.status(400).json({ ok: false, error: 'Folio, remitente y asunto son requeridos' });
-        try {
-            const creado = await Registro.create({ folio, remitente, asunto, estado });
-            res.status(201).json({ ok: true, data: creado });
-        } catch (e) {
-            if (e.code === 11000) {
-                return res.status(400).json({ ok: false, error: 'Folio ya existe' });
-            }
-            throw e;
-        }
-    } catch (err) {
-        console.error('Error creando registro', err);
-        res.status(500).json({ ok: false, error: 'Error creando registro' });
-    }
-});
-
-// Auth routes
+// Rutas Públicas (Auth)
 console.log('Definiendo ruta POST /auth/register');
 app.post('/auth/register', async (req, res) => {
     try {
@@ -94,7 +73,7 @@ app.post('/auth/login', async (req, res) => {
     }
 });
 
-// Middleware to authenticate token
+// MIDDLEWARE DE AUTENTICACIÓN (Debe ir antes de las rutas protegidas)
 app.use((req, res, next) => {
     const auth = req.headers.authorization;
     if (!auth) return next();
@@ -108,6 +87,85 @@ app.use((req, res, next) => {
         // ignore invalid token
     }
     next();
+});
+
+// RUTAS PROTEGIDAS
+
+// Endpoint para crear un nuevo registro (persistente)
+app.post('/registro', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+        const { remitente, asunto, estado, departamentoAsignado } = req.body;
+        let { folio } = req.body;
+        
+        if (!remitente || !asunto) return res.status(400).json({ ok: false, error: 'Remitente y asunto son requeridos' });
+        
+        // Generar folio automáticamente si no viene
+        if (!folio) {
+            const count = await Registro.countDocuments();
+            const year = new Date().getFullYear();
+            folio = `DOC-${year}-${(count + 1).toString().padStart(3, '0')}`;
+        }
+
+        try {
+            const creado = await Registro.create({ folio, remitente, asunto, estado, departamentoAsignado });
+            res.status(201).json({ ok: true, data: creado });
+        } catch (e) {
+            if (e.code === 11000) {
+                return res.status(400).json({ ok: false, error: 'Folio ya existe' });
+            }
+            throw e;
+        }
+    } catch (err) {
+        console.error('Error creando registro', err);
+        res.status(500).json({ ok: false, error: 'Error creando registro' });
+    }
+});
+
+// Endpoint para buscar por folio
+app.get('/registro/:folio', async (req, res) => {
+    try {
+        const doc = await Registro.findOne({ folio: req.params.folio }).populate('departamentoAsignado');
+        if (!doc) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+        res.json({ ok: true, data: doc });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error al buscar documento' });
+    }
+});
+
+// Endpoint para actualizar documento
+app.put('/registro/:id', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+        const actualizado = await Registro.findByIdAndUpdate(req.params.id, req.body, { new: true });
+        res.json({ ok: true, data: actualizado });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error actualizando documento' });
+    }
+});
+
+// SERVICIO DE DEPARTAMENTOS
+app.post('/departamentos', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+        const { nombre, responsable, descripcion } = req.body;
+        if (!nombre || !responsable) return res.status(400).json({ ok: false, error: 'Nombre y responsable son requeridos' });
+        
+        const depto = await Departamento.create({ nombre, responsable, descripcion });
+        res.status(201).json({ ok: true, data: depto });
+    } catch (err) {
+        if (err.code === 11000) return res.status(400).json({ ok: false, error: 'El departamento ya existe' });
+        res.status(500).json({ ok: false, error: 'Error al crear departamento' });
+    }
+});
+
+app.get('/departamentos', async (req, res) => {
+    try {
+        const deptos = await Departamento.find();
+        res.json({ ok: true, data: deptos });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error al obtener departamentos' });
+    }
 });
 
 // Obtener todos los registros (bandeja de entrada)
