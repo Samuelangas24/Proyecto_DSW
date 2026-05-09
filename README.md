@@ -1,277 +1,83 @@
-# 📋 Sistema de Gestión Documental - Proyecto DSW
+# 📋 Sistema de Gestión Documental - Oficialía DSW
 
-## 🚀 Requisitos Previos
+Este proyecto es una aplicación web Full-Stack diseñada para la modernización del proceso de oficialía de partes, permitiendo el registro, turno y seguimiento de documentos institucionales.
 
-Antes de comenzar, asegúrate de tener instalado en tu computadora:
+## 🚀 Características Implementadas (Proyecto Integrador 7)
 
-### **Software Obligatorio:**
-1. **Node.js** (v14 o superior) - Incluye npm
-   - Descarga desde: https://nodejs.org/
-   - Verifica la instalación: `node --version` y `npm --version`
-
-2. **Git** - Para clonar el repositorio
-   - Descarga desde: https://git-scm.com/
-
-3. **Editor de código** (recomendado: VS Code)
-   - Descarga desde: https://code.visualstudio.com/
+- **Servicio de Documentos:** Registro de documentos con generación automática de folio único (ej. `DOC-2026-001`) y consulta en bandeja.
+- **Servicio de Departamentos:** Creación y visualización de departamentos de la institución.
+- **Servicio de Turnos y Seguimiento:** Capacidad para turnar un documento a un departamento, cambiar su estado, añadir observaciones y mantener un historial detallado de movimientos.
+- **Servicio de Usuarios (Roles):** Sistema de seguridad con JWT y encriptación (bcrypt). Soporta roles (`administrador`, `oficialia`, `departamento`) para ocultar menús y proteger rutas.
+- **Arquitectura MERN:** React (Frontend) + Node.js/Express (Backend) + MongoDB (Base de datos).
 
 ---
 
-## 📦 Librerías y Dependencias del Proyecto
+## 🔐 Cuentas de Prueba (Pre-configuradas)
 
-El proyecto utiliza las siguientes librerías que se **instalarán automáticamente**:
+La base de datos se inicializa con los siguientes usuarios de prueba para verificar los diferentes niveles de acceso:
 
-### **Dependencias Principales:**
-- `react` (^18.2.0) - Framework principal
-- `react-dom` (^18.2.0) - Renderizado de React en el navegador
-- `react-router-dom` (^7.14.2) - Enrutamiento entre páginas
-- `react-scripts` (5.0.1) - Herramientas de build
-- `axios` (^1.16.0) - Cliente HTTP para peticiones
-
-### **Dependencias de Desarrollo:**
-- `tailwindcss` (^3.4.19) - Framework CSS para estilos
-- `postcss` (^8.5.13) - Procesador de CSS
-- `autoprefixer` (^10.5.0) - Compatibilidad CSS en navegadores
+| Rol | Correo / Email | Contraseña | Permisos |
+| :--- | :--- | :--- | :--- |
+| **Administrador** | `admin@local` | `admin123` | Acceso total (Crear documentos, departamentos y turnar). |
+| **Oficialía** | `oficialia@local` | `12345` | Puede crear documentos y turnarlos. No puede gestionar departamentos. |
+| **Departamento** | `departamento@local` | `12345` | Solo puede visualizar la bandeja y turnar/responder documentos. |
 
 ---
 
-## 🔧 Pasos para Clonar y Ejecutar el Proyecto
+## 🔧 Requisitos Previos
 
-### **1. Clonar el repositorio**
+1. **Node.js** (v14 o superior)
+2. **MongoDB** (Instalado y corriendo localmente en el puerto `27017`, o configurar `MONGO_URI` en un archivo `.env`).
+3. **Git**
+
+---
+
+## 🚀 Pasos para Ejecutar el Proyecto (Local)
+
+El proyecto está dividido en dos partes. Necesitas **dos terminales** abiertas:
+
+### Terminal 1: Iniciar el Backend (Servidor)
 ```bash
-git clone https://github.com/Samuelangas24/Proyecto_DSW.git
-cd Proyecto_DSW
+cd backend
+npm install
+node server.js
 ```
+> El servidor se levantará en `http://localhost:3001` y se conectará automáticamente a MongoDB.
 
-### **2. Instalar dependencias**
+### Terminal 2: Iniciar el Frontend (React)
+Abre otra terminal en la carpeta principal del proyecto:
 ```bash
 npm install
-```
-> Esto descargará e instalará todas las librerías necesarias (package.json las especifica automáticamente)
-
-### **3. Iniciar la aplicación**
-```bash
 npm start
 ```
-> La aplicación se abrirá en `http://localhost:3000` automáticamente
-
-### **4. Para compilar para producción**
-```bash
-npm run build
-```
+> La aplicación visual se abrirá en `http://localhost:3000`.
 
 ---
 
 ## 📁 Estructura del Proyecto
 
-```
-src/
-├── App.jsx              # Componente principal
-├── index.js             # Punto de entrada
-├── index.css            # Estilos globales (Tailwind)
-├── components/          # Componentes reutilizables
-│   ├── Navbar.jsx
-│   ├── Sidebar.jsx
-│   └── StatCard.jsx
-└── page/                # Páginas de la aplicación
-    └── Dashboard.jsx
-```
-
----
-
-## 🎯 Comandos Útiles
-
-```bash
-# Iniciar desarrollo
-npm start
-
-# Compilar para producción
-npm run build
-
-# Ejecutar pruebas
-npm test
-
-# Limpiar caché
-rm -r node_modules/.cache
+```text
+Proyecto_DSW/
+├── backend/               # Lógica del servidor (Node.js + Express)
+│   ├── models/            # Esquemas de MongoDB (User, Registro, Departamento, Turno)
+│   ├── server.js          # Punto de entrada, API REST y Middlewares
+│   └── package.json
+├── src/                   # Lógica del cliente (React)
+│   ├── components/        # Componentes UI (Sidebar, Navbar)
+│   ├── page/              # Pantallas (Bandeja, Departamentos, Registro, Login)
+│   └── App.jsx            # Enrutamiento principal
+└── package.json
 ```
 
 ---
 
-## 💡 Consideraciones Importantes
+## 🎯 Tecnologías Utilizadas
 
-1. **No subir `node_modules` a Git** ✅ (Ya está en .gitignore)
-   - Solo tus compañeros necesitan hacer `npm install`
-
-2. **Puertos disponibles:**
-   - Si el puerto 3000 está en uso, React sugiere automáticamente otro puerto
-
-3. **Configurar Git por primera vez:**
-   ```bash
-   git config --global user.email "tu_email@gmail.com"
-   git config --global user.name "Tu Nombre"
-   ```
-
-4. **Hacer cambios y subirlos:**
-   ```bash
-   git add .
-   git commit -m "Descripción del cambio"
-   git push origin main
-   ```
-
----
+- **Frontend:** React, React Router, TailwindCSS, Axios.
+- **Backend:** Node.js, Express, jsonwebtoken, bcryptjs, cors.
+- **Base de Datos:** MongoDB y Mongoose.
 
 ## ⚠️ Solución de Problemas
 
-| Problema | Solución |
-|----------|----------|
-| `npm: command not found` | Instala Node.js desde nodejs.org |
-| Puerto 3000 en uso | npm start sugerirá otro puerto automáticamente |
-| Error de estilos (Tailwind) | Ejecuta `rm -r node_modules && npm install` |
-| Cambios no aparecen | Recarga el navegador (Ctrl+R o Cmd+R) |
-
----
-
-## 📞 Soporte
-
-Si hay problemas, contacta al equipo DSW o revisa la consola del navegador (F12) para ver errores.
-
-**¡Happy Coding! 🚀**
-
-# 📋 Sistema de Gestión Documental - Proyecto DSW
-
-## 🚀 Requisitos Previos
-
-Antes de comenzar, asegúrate de tener instalado en tu computadora:
-
-### **Software Obligatorio:**
-1. **Node.js** (v14 o superior) - Incluye npm
-   - Descarga desde: https://nodejs.org/
-   - Verifica la instalación: `node --version` y `npm --version`
-
-2. **Git** - Para clonar el repositorio
-   - Descarga desde: https://git-scm.com/
-
-3. **Editor de código** (recomendado: VS Code)
-   - Descarga desde: https://code.visualstudio.com/
-
----
-
-## 📦 Librerías y Dependencias del Proyecto
-
-El proyecto utiliza las siguientes librerías que se **instalarán automáticamente**:
-
-### **Dependencias Principales:**
-- `react` (^18.2.0) - Framework principal
-- `react-dom` (^18.2.0) - Renderizado de React en el navegador
-- `react-router-dom` (^7.14.2) - Enrutamiento entre páginas
-- `react-scripts` (5.0.1) - Herramientas de build
-- `axios` (^1.16.0) - Cliente HTTP para peticiones
-
-### **Dependencias de Desarrollo:**
-- `tailwindcss` (^3.4.19) - Framework CSS para estilos
-- `postcss` (^8.5.13) - Procesador de CSS
-- `autoprefixer` (^10.5.0) - Compatibilidad CSS en navegadores
-
----
-
-## 🔧 Pasos para Clonar y Ejecutar el Proyecto
-
-### **1. Clonar el repositorio**
-```bash
-git clone https://github.com/Samuelangas24/Proyecto_DSW.git
-cd Proyecto_DSW
-```
-
-### **2. Instalar dependencias**
-```bash
-npm install
-```
-> Esto descargará e instalará todas las librerías necesarias (package.json las especifica automáticamente)
-
-### **3. Iniciar la aplicación**
-```bash
-npm start
-```
-> La aplicación se abrirá en `http://localhost:3000` automáticamente
-
-### **4. Para compilar para producción**
-```bash
-npm run build
-```
-
----
-
-## 📁 Estructura del Proyecto
-
-```
-src/
-├── App.jsx              # Componente principal
-├── index.js             # Punto de entrada
-├── index.css            # Estilos globales (Tailwind)
-├── components/          # Componentes reutilizables
-│   ├── Navbar.jsx
-│   ├── Sidebar.jsx
-│   └── StatCard.jsx
-└── page/                # Páginas de la aplicación
-    └── Dashboard.jsx
-```
-
----
-
-## 🎯 Comandos Útiles
-
-```bash
-# Iniciar desarrollo
-npm start
-
-# Compilar para producción
-npm run build
-
-# Ejecutar pruebas
-npm test
-
-# Limpiar caché
-rm -r node_modules/.cache
-```
-
----
-
-## 💡 Consideraciones Importantes
-
-1. **No subir `node_modules` a Git** ✅ (Ya está en .gitignore)
-   - Solo tus compañeros necesitan hacer `npm install`
-
-2. **Puertos disponibles:**
-   - Si el puerto 3000 está en uso, React sugiere automáticamente otro puerto
-
-3. **Configurar Git por primera vez:**
-   ```bash
-   git config --global user.email "tu_email@gmail.com"
-   git config --global user.name "Tu Nombre"
-   ```
-
-4. **Hacer cambios y subirlos:**
-   ```bash
-   git add .
-   git commit -m "Descripción del cambio"
-   git push origin main
-   ```
-
----
-
-## ⚠️ Solución de Problemas
-
-| Problema | Solución |
-|----------|----------|
-| `npm: command not found` | Instala Node.js desde nodejs.org |
-| Puerto 3000 en uso | npm start sugerirá otro puerto automáticamente |
-| Error de estilos (Tailwind) | Ejecuta `rm -r node_modules && npm install` |
-| Cambios no aparecen | Recarga el navegador (Ctrl+R o Cmd+R) |
-
----
-
-## 📞 Soporte
-
-claudecode.com
-chatgpt.com
-
+- Si ves un error de **"Unauthorized (401)"** al intentar crear algo, probablemente tu sesión expiró. Cierra sesión y vuelve a ingresar.
+- Si el backend dice **"Error conectando a MongoDB"**, asegúrate de que el servicio de MongoDB en tu computadora esté encendido.
