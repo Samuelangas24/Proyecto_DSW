@@ -8,6 +8,7 @@ import Bandeja from './page/Bandeja';
 import Reportes from './page/Reportes';
 import Login from './page/Login';
 import RegisterUser from './page/RegisterUser';
+import Departamentos from './page/Departamentos';
 import axios from 'axios';
 import { useEffect } from 'react';
 
@@ -32,6 +33,7 @@ function App() {
               <Route path="/registro" element={<Registro />} />
               <Route path="/bandeja" element={<Bandeja />} />
               <Route path="/reportes" element={<Reportes />} />
+              <Route path="/departamentos" element={<Departamentos />} />
               <Route path="/login" element={<Login />} />
               <Route path="/register" element={<RegisterUser />} />
             </Routes>
