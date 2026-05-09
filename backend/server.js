@@ -5,6 +5,7 @@ const mongoose = require('mongoose');
 const Registro = require('./models/Registro');
 const User = require('./models/User');
 const Departamento = require('./models/Departamento');
+const Turno = require('./models/Turno');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
@@ -165,6 +166,60 @@ app.get('/departamentos', async (req, res) => {
         res.json({ ok: true, data: deptos });
     } catch (err) {
         res.status(500).json({ ok: false, error: 'Error al obtener departamentos' });
+    }
+});
+
+// SERVICIO DE TURNOS Y SEGUIMIENTO
+app.post('/turnos', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+        const { documentoId, estadoNuevo, departamentoDestino, observaciones } = req.body;
+        
+        if (!documentoId || !estadoNuevo || !observaciones) {
+            return res.status(400).json({ ok: false, error: 'Faltan datos obligatorios para el turno' });
+        }
+
+        // Buscar documento para saber su estado anterior
+        const doc = await Registro.findById(documentoId);
+        if (!doc) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+
+        const estadoAnterior = doc.estado;
+
+        // Crear registro en el historial
+        const turno = await Turno.create({
+            documento: documentoId,
+            usuario: req.user.id,
+            estadoAnterior,
+            estadoNuevo,
+            departamentoDestino: departamentoDestino || null,
+            observaciones
+        });
+
+        // Actualizar el estado y el departamento en el documento principal
+        doc.estado = estadoNuevo;
+        if (departamentoDestino) {
+            doc.departamentoAsignado = departamentoDestino;
+        }
+        await doc.save();
+
+        res.status(201).json({ ok: true, data: turno });
+    } catch (err) {
+        console.error('Error creando turno', err);
+        res.status(500).json({ ok: false, error: 'Error al turnar documento' });
+    }
+});
+
+app.get('/turnos/:idDocumento', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
+        const historial = await Turno.find({ documento: req.params.idDocumento })
+            .populate('usuario', 'email role')
+            .populate('departamentoDestino', 'nombre')
+            .sort({ createdAt: -1 });
+            
+        res.json({ ok: true, data: historial });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error obteniendo historial' });
     }
 });
 

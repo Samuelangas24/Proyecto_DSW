@@ -17,6 +17,9 @@ const Sidebar = () => {
         <Link to="/bandeja" className="block p-3 rounded hover:bg-slate-800 transition">
           📥 Bandeja de Entrada
         </Link>
+        <Link to="/departamentos" className="block p-3 rounded hover:bg-slate-800 transition">
+          🏢 Departamentos
+        </Link>
         <Link to="/reportes" className="block p-3 rounded hover:bg-slate-800 transition">
           📈 Reportes
         </Link>
