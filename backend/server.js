@@ -13,7 +13,8 @@ const app = express();
 
 app.use(cors());
 app.use(express.json());
-// Log simple de todas las peticiones entrantes (diagnóstico)
+
+// Log simple de todas las peticiones entrantes
 app.use((req, res, next) => {
     console.log(new Date().toISOString(), req.method, req.path);
     next();
@@ -23,14 +24,16 @@ app.get("/", (req, res) => {
     res.json({ mensaje: "API Oficialía DSW funcionando" });
 });
 
-// Rutas Públicas (Auth)
-console.log('Definiendo ruta POST /auth/register');
+// --- RUTAS PÚBLICAS (AUTH) ---
+
 app.post('/auth/register', async (req, res) => {
     try {
         const { nombre, email, password, role, departamento } = req.body;
         if (!email || !password) return res.status(400).json({ ok: false, error: 'Email and password required' });
+        
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ ok: false, error: 'User exists' });
+        
         const hash = await bcrypt.hash(password, 10);
         const user = await User.create({
             nombre,
@@ -46,43 +49,64 @@ app.post('/auth/register', async (req, res) => {
     }
 });
 
-// Alias simple para registro: POST /register (por compatibilidad)
-console.log('Definiendo ruta POST /register');
+// Alias para registro (unificado con validación de departamento)
 app.post('/register', async (req, res) => {
     try {
         const { nombre, email, password, role, departamento } = req.body;
         if (!email || !password) return res.status(400).json({ ok: false, error: 'Email and password required' });
+        
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ ok: false, error: 'User exists' });
+        
         const hash = await bcrypt.hash(password, 10);
-        const user = await User.create({
+        
+        let deptoValido = null;
+        if (departamento) {
+            deptoValido = await Departamento.findById(departamento);
+            if (!deptoValido) return res.status(400).json({ ok: false, error: 'Departamento no válido' });
+        }
+        
+        const user = await User.create({ 
             nombre,
-            email,
-            passwordHash: hash,
+            email, 
+            passwordHash: hash, 
             role: role || 'oficialia',
-            departamento
-        }); res.status(201).json({ ok: true, data: { id: user._id, email: user.email, role: user.role } });
+            departamento: deptoValido ? deptoValido._id : null
+        });
+        
+        res.status(201).json({ 
+            ok: true, 
+            data: { 
+                id: user._id, 
+                email: user.email, 
+                role: user.role,
+                departamento: user.departamento 
+            } 
+        });
     } catch (err) {
         console.error('Error register alias', err);
         res.status(500).json({ ok: false, error: 'Error registering user' });
     }
 });
 
-console.log('Definiendo ruta POST /auth/login');
 app.post('/auth/login', async (req, res) => {
     try {
         const { email, password } = req.body;
         if (!email || !password) return res.status(400).json({ ok: false, error: 'Email and password required' });
+        
         const user = await User.findOne({ email });
         if (!user) return res.status(400).json({ ok: false, error: 'Invalid credentials' });
+        
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return res.status(400).json({ ok: false, error: 'Invalid credentials' });
+        
         const token = jwt.sign({
             id: user._id,
             email: user.email,
             role: user.role,
             departamento: user.departamento
         }, process.env.JWT_SECRET || 'changeme', { expiresIn: '8h' });
+        
         res.json({ ok: true, data: { token } });
     } catch (err) {
         console.error('Error login', err);
@@ -90,7 +114,8 @@ app.post('/auth/login', async (req, res) => {
     }
 });
 
-// MIDDLEWARE DE AUTENTICACIÓN (Debe ir antes de las rutas protegidas)
+// --- MIDDLEWARES ---
+
 app.use((req, res, next) => {
     const auth = req.headers.authorization;
     if (!auth) return next();
@@ -100,141 +125,57 @@ app.use((req, res, next) => {
     try {
         const data = jwt.verify(token, process.env.JWT_SECRET || 'changeme');
         req.user = data;
-    } catch (err) {
-        // ignore invalid token
-    }
+    } catch (err) { /* ignore invalid token */ }
     next();
 });
 
-// MIDDLEWARE DE ROLES
 const requireRole = (rolesPermitidos) => {
     return (req, res, next) => {
-        if (!req.user) {
-            return res.status(401).json({ ok: false, error: 'Inicia sesión para continuar' });
-        }
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Inicia sesión para continuar' });
         if (!rolesPermitidos.includes(req.user.role)) {
-            return res.status(403).json({ ok: false, error: 'No tienes permisos suficientes (Requiere rol: ' + rolesPermitidos.join(' o ') + ')' });
+            return res.status(403).json({ ok: false, error: 'No tienes permisos suficientes' });
         }
         next();
     };
 };
 
-// RUTAS PROTEGIDAS
-// Obtener usuarios
-app.get('/usuarios', requireRole(['administrador']), async (req, res) => {
-
+const requireDepartmentAccess = async (req, res, next) => {
     try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Inicia sesión para continuar' });
+        if (req.user.role === 'administrador' || req.user.role === 'oficialia') return next();
+        
+        const usuario = await User.findById(req.user.id).populate('departamento');
+        if (!usuario.departamento) return res.status(403).json({ ok: false, error: 'No tienes departamento asignado' });
+        
+        if (req.params.id || req.params.folio) {
+            const documentoId = req.params.id || req.params.folio;
+            const documento = await Registro.findOne(req.params.folio ? { folio: documentoId } : { _id: documentoId });
+            
+            if (!documento) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+            if (!documento.departamentoAsignado || documento.departamentoAsignado.toString() !== usuario.departamento._id.toString()) {
+                return res.status(403).json({ ok: false, error: 'No tienes permiso para ver este documento' });
+            }
+        }
+        next();
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error verificando permisos' });
+    }
+};
 
+// --- RUTAS PROTEGIDAS ---
+
+app.get('/usuarios', requireRole(['administrador', 'oficialia']), async (req, res) => {
+    try {
         const usuarios = await User.find()
-            .populate('departamento', 'nombre responsable');
-
-        res.json({
-            ok: true,
-            data: usuarios
-        });
-
+            .select('-passwordHash')
+            .populate('departamento', 'nombre responsable')
+            .sort({ createdAt: -1 });
+        res.json({ ok: true, data: usuarios });
     } catch (err) {
-
-        console.error('Error obteniendo usuarios', err);
-
-        res.status(500).json({
-            ok: false,
-            error: 'Error obteniendo usuarios'
-        });
-
+        res.status(500).json({ ok: false, error: 'Error obteniendo usuarios' });
     }
-
 });
-// Obtener tareas asignadas al usuario
-app.get('/mis-tareas', async (req, res) => {
 
-    try {
-
-        if (!req.user) {
-            return res.status(401).json({
-                ok: false,
-                error: 'Unauthorized'
-            });
-        }
-
-        const tareas = await Registro.find({
-            usuarioAsignado: req.user.id
-        })
-            .populate('departamentoAsignado', 'nombre')
-            .populate('usuarioAsignado', 'nombre email');
-
-        res.json({
-            ok: true,
-            data: tareas
-        });
-
-    } catch (err) {
-
-        console.error('Error obteniendo tareas', err);
-
-        res.status(500).json({
-            ok: false,
-            error: 'Error obteniendo tareas'
-        });
-
-    }
-
-});
-// Asignar documento a usuario
-app.put('/documentos/:id/asignar', async (req, res) => {
-
-    try {
-
-        if (!req.user) {
-            return res.status(401).json({
-                ok: false,
-                error: 'Unauthorized'
-            });
-        }
-
-        const { usuarioAsignado } = req.body;
-
-        const documento = await Registro.findById(req.params.id);
-
-        if (!documento) {
-            return res.status(404).json({
-                ok: false,
-                error: 'Documento no encontrado'
-            });
-        }
-
-        const usuario = await User.findById(usuarioAsignado);
-
-        if (!usuario) {
-            return res.status(404).json({
-                ok: false,
-                error: 'Usuario no encontrado'
-            });
-        }
-
-        documento.usuarioAsignado = usuarioAsignado;
-
-        await documento.save();
-
-        res.json({
-            ok: true,
-            message: 'Documento asignado correctamente',
-            data: documento
-        });
-
-    } catch (err) {
-
-        console.error('Error asignando documento', err);
-
-        res.status(500).json({
-            ok: false,
-            error: 'Error asignando documento'
-        });
-
-    }
-
-});
-// Endpoint para crear un nuevo registro (Solo Oficialía y Admin)
 app.post('/registro', requireRole(['oficialia', 'administrador']), async (req, res) => {
     try {
         const { remitente, asunto, estado, departamentoAsignado } = req.body;
@@ -242,30 +183,21 @@ app.post('/registro', requireRole(['oficialia', 'administrador']), async (req, r
 
         if (!remitente || !asunto) return res.status(400).json({ ok: false, error: 'Remitente y asunto son requeridos' });
 
-        // Generar folio automáticamente si no viene
         if (!folio) {
             const count = await Registro.countDocuments();
             const year = new Date().getFullYear();
             folio = `DOC-${year}-${(count + 1).toString().padStart(3, '0')}`;
         }
 
-        try {
-            const creado = await Registro.create({ folio, remitente, asunto, estado, departamentoAsignado });
-            res.status(201).json({ ok: true, data: creado });
-        } catch (e) {
-            if (e.code === 11000) {
-                return res.status(400).json({ ok: false, error: 'Folio ya existe' });
-            }
-            throw e;
-        }
+        const creado = await Registro.create({ folio, remitente, asunto, estado, departamentoAsignado });
+        res.status(201).json({ ok: true, data: creado });
     } catch (err) {
-        console.error('Error creando registro', err);
+        if (err.code === 11000) return res.status(400).json({ ok: false, error: 'Folio ya existe' });
         res.status(500).json({ ok: false, error: 'Error creando registro' });
     }
 });
 
-// Endpoint para buscar por folio
-app.get('/registro/:folio', async (req, res) => {
+app.get('/registro/:folio', requireDepartmentAccess, async (req, res) => {
     try {
         const doc = await Registro.findOne({ folio: req.params.folio }).populate('departamentoAsignado');
         if (!doc) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
@@ -275,7 +207,6 @@ app.get('/registro/:folio', async (req, res) => {
     }
 });
 
-// Endpoint para actualizar documento
 app.put('/registro/:id', async (req, res) => {
     try {
         if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
@@ -286,16 +217,64 @@ app.put('/registro/:id', async (req, res) => {
     }
 });
 
-// SERVICIO DE DEPARTAMENTOS
+app.put('/documentos/:id/asignar', requireRole(['oficialia', 'administrador']), async (req, res) => {
+    try {
+        const { usuarioId, departamentoId } = req.body;
+        if (!usuarioId && !departamentoId) return res.status(400).json({ ok: false, error: 'Faltan datos' });
+        
+        const documento = await Registro.findById(req.params.id);
+        if (!documento) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+        
+        if (usuarioId) {
+            const usuario = await User.findById(usuarioId).populate('departamento');
+            if (!usuario || !usuario.departamento) return res.status(400).json({ ok: false, error: 'Usuario o depto inválido' });
+            documento.departamentoAsignado = usuario.departamento._id;
+            documento.usuarioAsignado = usuarioId;
+        } else if (departamentoId) {
+            documento.departamentoAsignado = departamentoId;
+        }
+        
+        const actualizado = await documento.save();
+        await Turno.create({
+            documento: req.params.id,
+            usuario: req.user.id,
+            estadoAnterior: documento.estado,
+            estadoNuevo: documento.estado,
+            departamentoDestino: actualizado.departamentoAsignado,
+            observaciones: `Asignado por ${req.user.email}`
+        });
+        
+        res.json({ ok: true, data: await actualizado.populate('departamentoAsignado', 'nombre') });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error asignando documento' });
+    }
+});
+
+app.get('/mis-tareas', async (req, res) => {
+    try {
+        if (!req.user) return res.status(401).json({ ok: false, error: 'Inicia sesión' });
+        const usuario = await User.findById(req.user.id).populate('departamento');
+        
+        let query = {};
+        if (usuario.role !== 'administrador' && usuario.role !== 'oficialia') {
+            if (!usuario.departamento) return res.json({ ok: true, data: [] });
+            query.departamentoAsignado = usuario.departamento._id;
+        }
+        
+        const tareas = await Registro.find(query).populate('departamentoAsignado').sort({ createdAt: -1 });
+        res.json({ ok: true, data: tareas });
+    } catch (err) {
+        res.status(500).json({ ok: false, error: 'Error obteniendo tareas' });
+    }
+});
+
+// --- SERVICIOS ADICIONALES ---
+
 app.post('/departamentos', requireRole(['administrador']), async (req, res) => {
     try {
-        const { nombre, responsable, descripcion } = req.body;
-        if (!nombre || !responsable) return res.status(400).json({ ok: false, error: 'Nombre y responsable son requeridos' });
-
-        const depto = await Departamento.create({ nombre, responsable, descripcion });
+        const depto = await Departamento.create(req.body);
         res.status(201).json({ ok: true, data: depto });
     } catch (err) {
-        if (err.code === 11000) return res.status(400).json({ ok: false, error: 'El departamento ya existe' });
         res.status(500).json({ ok: false, error: 'Error al crear departamento' });
     }
 });
@@ -305,166 +284,57 @@ app.get('/departamentos', async (req, res) => {
         const deptos = await Departamento.find();
         res.json({ ok: true, data: deptos });
     } catch (err) {
-        res.status(500).json({ ok: false, error: 'Error al obtener departamentos' });
+        res.status(500).json({ ok: false, error: 'Error' });
     }
 });
 
-// SERVICIO DE TURNOS Y SEGUIMIENTO
 app.post('/turnos', async (req, res) => {
     try {
         if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
         const { documentoId, estadoNuevo, departamentoDestino, observaciones } = req.body;
-
-        if (!documentoId || !estadoNuevo || !observaciones) {
-            return res.status(400).json({ ok: false, error: 'Faltan datos obligatorios para el turno' });
-        }
-
-        // Buscar documento para saber su estado anterior
+        
         const doc = await Registro.findById(documentoId);
-        if (!doc) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+        if (!doc) return res.status(404).json({ ok: false, error: 'No encontrado' });
 
-        const estadoAnterior = doc.estado;
-
-        // Crear registro en el historial
         const turno = await Turno.create({
             documento: documentoId,
             usuario: req.user.id,
-            estadoAnterior,
+            estadoAnterior: doc.estado,
             estadoNuevo,
-            departamentoDestino: departamentoDestino || null,
+            departamentoDestino,
             observaciones
         });
 
-        // Actualizar el estado y el departamento en el documento principal
         doc.estado = estadoNuevo;
-        if (departamentoDestino) {
-            doc.departamentoAsignado = departamentoDestino;
-        }
+        if (departamentoDestino) doc.departamentoAsignado = departamentoDestino;
         await doc.save();
 
         res.status(201).json({ ok: true, data: turno });
     } catch (err) {
-        console.error('Error creando turno', err);
-        res.status(500).json({ ok: false, error: 'Error al turnar documento' });
+        res.status(500).json({ ok: false, error: 'Error al turnar' });
     }
 });
 
-app.get('/turnos/:idDocumento', async (req, res) => {
-    try {
-        if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-        const historial = await Turno.find({ documento: req.params.idDocumento })
-            .populate('usuario', 'email role')
-            .populate('departamentoDestino', 'nombre')
-            .sort({ createdAt: -1 });
-
-        res.json({ ok: true, data: historial });
-    } catch (err) {
-        res.status(500).json({ ok: false, error: 'Error obteniendo historial' });
-    }
-});
-
-// Obtener todos los registros (bandeja de entrada)
-app.get('/bandeja', async (req, res) => {
-    try {
-        let filtro = {};
-
-        if (req.user && req.user.role !== 'administrador') {
-
-            filtro.departamentoAsignado = req.user.departamento;
-
-        }
-
-        const docs = await Registro.find(filtro)
-            .sort({ createdAt: -1 })
-            .limit(100)
-            .populate('departamentoAsignado', 'nombre');
-        res.json({ ok: true, data: docs });
-    } catch (err) {
-        console.error('Error obteniendo bandeja', err);
-        res.status(500).json({ ok: false, error: 'Error obteniendo bandeja' });
-    }
-});
-
-// Estadísticas / reportes básicos
 app.get('/reportes', async (req, res) => {
     try {
         const total = await Registro.countDocuments();
-        const byEstadoAgg = await Registro.aggregate([
-            { $group: { _id: '$estado', count: { $sum: 1 } } }
-        ]);
-        const byRemitenteAgg = await Registro.aggregate([
-            { $group: { _id: '$remitente', count: { $sum: 1 } } },
-            { $sort: { count: -1 } }
-        ]);
-
-        const byEstado = {};
-        byEstadoAgg.forEach(i => { byEstado[i._id || 'Desconocido'] = i.count; });
-
-        const byRemitente = {};
-        byRemitenteAgg.forEach(i => { byRemitente[i._id || 'Desconocido'] = i.count; });
-
-        res.json({ ok: true, data: { total, byEstado, byRemitente } });
+        res.json({ ok: true, data: { total } });
     } catch (err) {
-        console.error('Error generando reportes', err);
-        res.status(500).json({ ok: false, error: 'Error generando reportes' });
+        res.status(500).json({ ok: false, error: 'Error reportes' });
     }
 });
 
-// Debug: mostrar estado del router ahora
-try {
-    console.log('DEBUG app._router type:', typeof app._router);
-    console.log('DEBUG app._router exists:', !!app._router);
-    console.log('DEBUG app._router.stack length:', app._router && app._router.stack ? app._router.stack.length : 'N/A');
-} catch (e) {
-    console.error('DEBUG error reading app._router', e);
-}
+// --- INICIO DEL SERVIDOR ---
 
-// Conectar a MongoDB y levantar servidor
 const http = require('http');
 const PORT = process.env.PORT || 3001;
 const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/oficialia';
 
 mongoose.connect(MONGO_URI).then(async () => {
     console.log('Conectado a MongoDB');
-    // Crear usuario admin por defecto si no existe
-    try {
-        const count = await User.countDocuments();
-        if (count === 0) {
-            const hash = await bcrypt.hash('admin123', 10);
-            await User.create({ email: 'admin@local', passwordHash: hash, role: 'administrador' });
-            console.log('Usuario admin creado: admin@local / admin123');
-        }
-    } catch (err) {
-        console.error('Error creando usuario admin', err);
-    }
-
-    const server = http.createServer((req, res) => {
-        console.log('RAW REQUEST:', req.method, req.url);
-        app(req, res);
-    });
-
-    server.listen(PORT, () => {
-        console.log(`Servidor backend corriendo en puerto ${PORT}`);
-    });
+    const server = http.createServer(app);
+    server.listen(PORT, () => console.log(`Servidor en puerto ${PORT}`));
 }).catch(err => {
-    console.error('Error conectando a MongoDB', err);
+    console.error('Error DB', err);
     process.exit(1);
 });
-
-// Listar rutas registradas (debug) si es posible
-try {
-    if (app._router && app._router.stack) {
-        const routes = [];
-        app._router.stack.forEach(mw => {
-            if (mw.route) {
-                const methods = Object.keys(mw.route.methods).join(',');
-                routes.push({ path: mw.route.path, methods });
-            }
-        });
-        console.log('Rutas (pre-start):', routes);
-    } else {
-        console.log('No hay router montado aún');
-    }
-} catch (e) {
-    console.error('Error listando rutas (pre-start)', e);
-}
