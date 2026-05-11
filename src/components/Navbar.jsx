@@ -23,22 +23,25 @@ const Navbar = () => {
   };
 
   return (
-    <header className="bg-white shadow-sm border-b px-6 py-4">
-      <div className="flex justify-between items-center">
-        <h1 className="text-xl font-semibold text-slate-800">Sistema de Gestión Documental</h1>
-        <div className="flex items-center space-x-4">
-          {token ? (
-            <>
-              <span className="text-sm text-slate-600">Usuario</span>
-              {role === 'admin' && (
-                <Link to="/register" className="text-slate-600 hover:text-slate-800">Nuevo usuario</Link>
-              )}
-              <button onClick={handleLogout} className="text-slate-500 hover:text-slate-700">Salir</button>
-            </>
-          ) : (
-            <Link to="/login" className="text-slate-600 hover:text-slate-800">Iniciar sesión</Link>
-          )}
-          <button className="text-slate-500 hover:text-slate-700">⚙️</button>
+    <header className="bg-slate-50 border-b border-slate-200 px-6 py-4 shadow-sm">
+      <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+        <div>
+          <h1 className="text-xl font-bold text-slate-900">Sistema de Oficialía de Partes</h1>
+          <p className="text-sm text-slate-600">Panel administrativo para control de documentos y turnos.</p>
+        </div>
+        <div className="flex items-center gap-4 text-slate-700">
+          <div className="text-right">
+            <p className="font-semibold">{token ? (JSON.parse(atob(token.split('.')[1])).name || JSON.parse(atob(token.split('.')[1])).email || 'Oficialía') : 'Invitado'}</p>
+            <p className="text-xs text-slate-500">{role ? role.toUpperCase() : 'Sin sesión'}</p>
+          </div>
+          <div className="flex items-center gap-2 rounded-full bg-white border border-slate-200 px-3 py-2 shadow-sm">
+            <span>👤</span>
+            {token ? (
+              <button onClick={handleLogout} className="text-sm text-slate-500 hover:text-slate-900">Cerrar sesión</button>
+            ) : (
+              <Link to="/login" className="text-sm text-slate-500 hover:text-slate-900">Iniciar sesión</Link>
+            )}
+          </div>
         </div>
       </div>
     </header>
