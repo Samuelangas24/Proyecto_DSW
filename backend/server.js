@@ -27,12 +27,18 @@ app.get("/", (req, res) => {
 console.log('Definiendo ruta POST /auth/register');
 app.post('/auth/register', async (req, res) => {
     try {
-        const { email, password, role } = req.body;
+        const { nombre, email, password, role, departamento } = req.body;
         if (!email || !password) return res.status(400).json({ ok: false, error: 'Email and password required' });
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ ok: false, error: 'User exists' });
         const hash = await bcrypt.hash(password, 10);
-        const user = await User.create({ email, passwordHash: hash, role: role || 'oficialia' });
+        const user = await User.create({
+            nombre,
+            email,
+            passwordHash: hash,
+            role: role || 'oficialia',
+            departamento
+        });
         res.status(201).json({ ok: true, data: { id: user._id, email: user.email, role: user.role } });
     } catch (err) {
         console.error('Error register', err);
@@ -44,13 +50,18 @@ app.post('/auth/register', async (req, res) => {
 console.log('Definiendo ruta POST /register');
 app.post('/register', async (req, res) => {
     try {
-        const { email, password, role } = req.body;
+        const { nombre, email, password, role, departamento } = req.body;
         if (!email || !password) return res.status(400).json({ ok: false, error: 'Email and password required' });
         const existing = await User.findOne({ email });
         if (existing) return res.status(400).json({ ok: false, error: 'User exists' });
         const hash = await bcrypt.hash(password, 10);
-        const user = await User.create({ email, passwordHash: hash, role: role || 'oficialia' });
-        res.status(201).json({ ok: true, data: { id: user._id, email: user.email, role: user.role } });
+        const user = await User.create({
+            nombre,
+            email,
+            passwordHash: hash,
+            role: role || 'oficialia',
+            departamento
+        }); res.status(201).json({ ok: true, data: { id: user._id, email: user.email, role: user.role } });
     } catch (err) {
         console.error('Error register alias', err);
         res.status(500).json({ ok: false, error: 'Error registering user' });
@@ -66,7 +77,12 @@ app.post('/auth/login', async (req, res) => {
         if (!user) return res.status(400).json({ ok: false, error: 'Invalid credentials' });
         const ok = await bcrypt.compare(password, user.passwordHash);
         if (!ok) return res.status(400).json({ ok: false, error: 'Invalid credentials' });
-        const token = jwt.sign({ id: user._id, email: user.email, role: user.role }, process.env.JWT_SECRET || 'changeme', { expiresIn: '8h' });
+        const token = jwt.sign({
+            id: user._id,
+            email: user.email,
+            role: user.role,
+            departamento: user.departamento
+        }, process.env.JWT_SECRET || 'changeme', { expiresIn: '8h' });
         res.json({ ok: true, data: { token } });
     } catch (err) {
         console.error('Error login', err);
@@ -104,15 +120,128 @@ const requireRole = (rolesPermitidos) => {
 };
 
 // RUTAS PROTEGIDAS
+// Obtener usuarios
+app.get('/usuarios', requireRole(['administrador']), async (req, res) => {
 
+    try {
+
+        const usuarios = await User.find()
+            .populate('departamento', 'nombre responsable');
+
+        res.json({
+            ok: true,
+            data: usuarios
+        });
+
+    } catch (err) {
+
+        console.error('Error obteniendo usuarios', err);
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error obteniendo usuarios'
+        });
+
+    }
+
+});
+// Obtener tareas asignadas al usuario
+app.get('/mis-tareas', async (req, res) => {
+
+    try {
+
+        if (!req.user) {
+            return res.status(401).json({
+                ok: false,
+                error: 'Unauthorized'
+            });
+        }
+
+        const tareas = await Registro.find({
+            usuarioAsignado: req.user.id
+        })
+            .populate('departamentoAsignado', 'nombre')
+            .populate('usuarioAsignado', 'nombre email');
+
+        res.json({
+            ok: true,
+            data: tareas
+        });
+
+    } catch (err) {
+
+        console.error('Error obteniendo tareas', err);
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error obteniendo tareas'
+        });
+
+    }
+
+});
+// Asignar documento a usuario
+app.put('/documentos/:id/asignar', async (req, res) => {
+
+    try {
+
+        if (!req.user) {
+            return res.status(401).json({
+                ok: false,
+                error: 'Unauthorized'
+            });
+        }
+
+        const { usuarioAsignado } = req.body;
+
+        const documento = await Registro.findById(req.params.id);
+
+        if (!documento) {
+            return res.status(404).json({
+                ok: false,
+                error: 'Documento no encontrado'
+            });
+        }
+
+        const usuario = await User.findById(usuarioAsignado);
+
+        if (!usuario) {
+            return res.status(404).json({
+                ok: false,
+                error: 'Usuario no encontrado'
+            });
+        }
+
+        documento.usuarioAsignado = usuarioAsignado;
+
+        await documento.save();
+
+        res.json({
+            ok: true,
+            message: 'Documento asignado correctamente',
+            data: documento
+        });
+
+    } catch (err) {
+
+        console.error('Error asignando documento', err);
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error asignando documento'
+        });
+
+    }
+
+});
 // Endpoint para crear un nuevo registro (Solo Oficialía y Admin)
 app.post('/registro', requireRole(['oficialia', 'administrador']), async (req, res) => {
     try {
         const { remitente, asunto, estado, departamentoAsignado } = req.body;
         let { folio } = req.body;
-        
+
         if (!remitente || !asunto) return res.status(400).json({ ok: false, error: 'Remitente y asunto son requeridos' });
-        
+
         // Generar folio automáticamente si no viene
         if (!folio) {
             const count = await Registro.countDocuments();
@@ -162,7 +291,7 @@ app.post('/departamentos', requireRole(['administrador']), async (req, res) => {
     try {
         const { nombre, responsable, descripcion } = req.body;
         if (!nombre || !responsable) return res.status(400).json({ ok: false, error: 'Nombre y responsable son requeridos' });
-        
+
         const depto = await Departamento.create({ nombre, responsable, descripcion });
         res.status(201).json({ ok: true, data: depto });
     } catch (err) {
@@ -185,7 +314,7 @@ app.post('/turnos', async (req, res) => {
     try {
         if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
         const { documentoId, estadoNuevo, departamentoDestino, observaciones } = req.body;
-        
+
         if (!documentoId || !estadoNuevo || !observaciones) {
             return res.status(400).json({ ok: false, error: 'Faltan datos obligatorios para el turno' });
         }
@@ -227,7 +356,7 @@ app.get('/turnos/:idDocumento', async (req, res) => {
             .populate('usuario', 'email role')
             .populate('departamentoDestino', 'nombre')
             .sort({ createdAt: -1 });
-            
+
         res.json({ ok: true, data: historial });
     } catch (err) {
         res.status(500).json({ ok: false, error: 'Error obteniendo historial' });
@@ -237,7 +366,18 @@ app.get('/turnos/:idDocumento', async (req, res) => {
 // Obtener todos los registros (bandeja de entrada)
 app.get('/bandeja', async (req, res) => {
     try {
-        const docs = await Registro.find().sort({ createdAt: -1 }).limit(100);
+        let filtro = {};
+
+        if (req.user && req.user.role !== 'administrador') {
+
+            filtro.departamentoAsignado = req.user.departamento;
+
+        }
+
+        const docs = await Registro.find(filtro)
+            .sort({ createdAt: -1 })
+            .limit(100)
+            .populate('departamentoAsignado', 'nombre');
         res.json({ ok: true, data: docs });
     } catch (err) {
         console.error('Error obteniendo bandeja', err);
@@ -291,7 +431,7 @@ mongoose.connect(MONGO_URI).then(async () => {
         const count = await User.countDocuments();
         if (count === 0) {
             const hash = await bcrypt.hash('admin123', 10);
-            await User.create({ email: 'admin@local', passwordHash: hash, role: 'admin' });
+            await User.create({ email: 'admin@local', passwordHash: hash, role: 'administrador' });
             console.log('Usuario admin creado: admin@local / admin123');
         }
     } catch (err) {
