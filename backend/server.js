@@ -8,6 +8,7 @@ const Departamento = require('./models/Departamento');
 const Turno = require('./models/Turno');
 const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
+const validator = require('validator');//celis
 
 const app = express();
 
@@ -108,30 +109,82 @@ const requireRole = (rolesPermitidos) => {
 // Endpoint para crear un nuevo registro (Solo Oficialía y Admin)
 app.post('/registro', requireRole(['oficialia', 'administrador']), async (req, res) => {
     try {
+
         const { remitente, asunto, estado, departamentoAsignado } = req.body;
         let { folio } = req.body;
-        
-        if (!remitente || !asunto) return res.status(400).json({ ok: false, error: 'Remitente y asunto son requeridos' });
-        
-        // Generar folio automáticamente si no viene
+
+        // VALIDACIONES
+
+        if (!remitente || remitente.trim().length < 3) {
+            return res.status(400).json({
+                ok: false,
+                error: 'El remitente debe tener al menos 3 caracteres'
+            });
+        }
+
+        if (!asunto || asunto.trim().length < 5) {
+            return res.status(400).json({
+                ok: false,
+                error: 'El asunto debe tener al menos 5 caracteres'
+            });
+        }
+
+        const estadosValidos = [
+            'Recibido',
+            'Turnado',
+            'En atención',
+            'Atendido',
+            'Archivado'
+        ];
+
+        if (estado && !estadosValidos.includes(estado)) {
+            return res.status(400).json({
+                ok: false,
+                error: 'Estado inválido'
+            });
+        }
+
+        // GENERAR FOLIO AUTOMÁTICO
+
         if (!folio) {
             const count = await Registro.countDocuments();
             const year = new Date().getFullYear();
-            folio = `DOC-${year}-${(count + 1).toString().padStart(3, '0')}`;
+
+            folio = `DOC-${year}-${(count + 1)
+                .toString()
+                .padStart(3, '0')}`;
         }
 
-        try {
-            const creado = await Registro.create({ folio, remitente, asunto, estado, departamentoAsignado });
-            res.status(201).json({ ok: true, data: creado });
-        } catch (e) {
-            if (e.code === 11000) {
-                return res.status(400).json({ ok: false, error: 'Folio ya existe' });
-            }
-            throw e;
-        }
+        // CREAR DOCUMENTO
+
+        const creado = await Registro.create({
+            folio,
+            remitente: remitente.trim(),
+            asunto: asunto.trim(),
+            estado,
+            departamentoAsignado
+        });
+
+        res.status(201).json({
+            ok: true,
+            data: creado
+        });
+
     } catch (err) {
+
         console.error('Error creando registro', err);
-        res.status(500).json({ ok: false, error: 'Error creando registro' });
+
+        if (err.code === 11000) {
+            return res.status(400).json({
+                ok: false,
+                error: 'El folio ya existe'
+            });
+        }
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error creando registro'
+        });
     }
 });
 
@@ -147,15 +200,71 @@ app.get('/registro/:folio', async (req, res) => {
 });
 
 // Endpoint para actualizar documento
+//celis 
 app.put('/registro/:id', async (req, res) => {
     try {
         if (!req.user) return res.status(401).json({ ok: false, error: 'Unauthorized' });
-        const actualizado = await Registro.findByIdAndUpdate(req.params.id, req.body, { new: true });
-        res.json({ ok: true, data: actualizado });
+
+        const actualizado = await Registro.findByIdAndUpdate(
+            req.params.id,
+            req.body,
+            { new: true }
+        );
+
+        res.json({
+            ok: true,
+            data: actualizado
+        });
+
     } catch (err) {
-        res.status(500).json({ ok: false, error: 'Error actualizando documento' });
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error actualizando documento'
+        });
     }
 });
+
+
+// ELIMINAR DOCUMENTO
+
+app.delete('/registro/:id', async (req, res) => {
+
+    try {
+
+        if (!req.user) {
+            return res.status(401).json({
+                ok: false,
+                error: 'Unauthorized'
+            });
+        }
+
+        const eliminado = await Registro.findByIdAndDelete(req.params.id);
+
+        if (!eliminado) {
+            return res.status(404).json({
+                ok: false,
+                error: 'Documento no encontrado'
+            });
+        }
+
+        res.json({
+            ok: true,
+            message: 'Documento eliminado correctamente'
+        });
+
+    } catch (err) {
+
+        console.error('Error eliminando documento', err);
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error eliminando documento'
+        });
+    }
+});
+//
+
 
 // SERVICIO DE DEPARTAMENTOS
 app.post('/departamentos', requireRole(['administrador']), async (req, res) => {
@@ -236,12 +345,58 @@ app.get('/turnos/:idDocumento', async (req, res) => {
 
 // Obtener todos los registros (bandeja de entrada)
 app.get('/bandeja', async (req, res) => {
+
     try {
-        const docs = await Registro.find().sort({ createdAt: -1 }).limit(100);
-        res.json({ ok: true, data: docs });
+
+        const {
+            estado,
+            remitente,
+            pagina = 1,
+            limite = 10
+        } = req.query;
+
+        let filtro = {};
+
+        // FILTRO POR ESTADO
+
+        if (estado) {
+            filtro.estado = estado;
+        }
+
+        // FILTRO POR REMITENTE
+
+        if (remitente) {
+            filtro.remitente = {
+                $regex: remitente,
+                $options: 'i'
+            };
+        }
+
+        const skip = (pagina - 1) * limite;
+
+        const docs = await Registro.find(filtro)
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(Number(limite));
+
+        const total = await Registro.countDocuments(filtro);
+
+        res.json({
+            ok: true,
+            total,
+            pagina: Number(pagina),
+            limite: Number(limite),
+            data: docs
+        });
+
     } catch (err) {
+
         console.error('Error obteniendo bandeja', err);
-        res.status(500).json({ ok: false, error: 'Error obteniendo bandeja' });
+
+        res.status(500).json({
+            ok: false,
+            error: 'Error obteniendo bandeja'
+        });
     }
 });
 
@@ -286,28 +441,46 @@ const MONGO_URI = process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/oficialia'
 
 mongoose.connect(MONGO_URI).then(async () => {
     console.log('Conectado a MongoDB');
+
     // Crear usuario admin por defecto si no existe
     try {
+
         const count = await User.countDocuments();
+
         if (count === 0) {
+
             const hash = await bcrypt.hash('admin123', 10);
-            await User.create({ email: 'admin@local', passwordHash: hash, role: 'admin' });
+
+            await User.create({
+                email: 'admin@local',
+                passwordHash: hash,
+                role: 'administrador'
+            });
+
             console.log('Usuario admin creado: admin@local / admin123');
         }
+
     } catch (err) {
+
         console.error('Error creando usuario admin', err);
     }
 
     const server = http.createServer((req, res) => {
+
         console.log('RAW REQUEST:', req.method, req.url);
+
         app(req, res);
     });
 
     server.listen(PORT, () => {
+
         console.log(`Servidor backend corriendo en puerto ${PORT}`);
     });
+
 }).catch(err => {
+
     console.error('Error conectando a MongoDB', err);
+
     process.exit(1);
 });
 
