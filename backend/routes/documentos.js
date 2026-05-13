@@ -95,4 +95,21 @@ router.put('/:id/asignar', requireRole(['oficialia', 'administrador']), async (r
     }
 });
 
+// Eliminar documento
+router.delete('/:id', requireRole(['administrador']), async (req, res) => {
+    try {
+        const documento = await Registro.findById(req.params.id);
+        if (!documento) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
+        
+        // Opcional: borrar el historial de turnos asociado
+        await Turno.deleteMany({ documento: req.params.id });
+        
+        await Registro.findByIdAndDelete(req.params.id);
+        res.json({ ok: true, mensaje: 'Documento eliminado exitosamente' });
+    } catch (err) {
+        console.error('Error eliminando documento', err);
+        res.status(500).json({ ok: false, error: 'Error eliminando documento' });
+    }
+});
+
 module.exports = router;
