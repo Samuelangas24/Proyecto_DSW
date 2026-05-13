@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import StatCard from '../components/StatCard';
 
 const Dashboard = () => {
   // Aquí simulas los datos que vendrán del Backend (Node.js)
-  const [stats, setStats] = useState({
+  const [stats] = useState({
     registrados: 14,
     pendientes: 5,
     archivados: 128

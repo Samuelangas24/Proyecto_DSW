@@ -9,7 +9,7 @@ const router = express.Router();
 // Obtener bandeja
 router.get('/', async (req, res) => {
     try {
-        const docs = await Registro.find().sort({ createdAt: -1 }).limit(100);
+        const docs = await Registro.find().populate('departamentoAsignado', 'nombre').sort({ createdAt: -1 }).limit(100);
         res.json({ ok: true, data: docs });
     } catch (err) {
         console.error('Error obteniendo bandeja', err);
