@@ -5,6 +5,7 @@ const Bandeja = () => {
   const [registros, setRegistros] = useState([]);
   const [departamentos, setDepartamentos] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState(null);
 
   // Modal y selección
   const [selectedDoc, setSelectedDoc] = useState(null);
@@ -40,6 +41,16 @@ const Bandeja = () => {
   };
 
   useEffect(() => {
+    const token = localStorage.getItem('token');
+    if (token) {
+      try {
+        const payloadBase64 = token.split('.')[1];
+        const decoded = JSON.parse(atob(payloadBase64));
+        setUserRole(decoded.role);
+      } catch (e) {
+        console.error('Error decodificando token', e);
+      }
+    }
     fetchRegistros();
     fetchDepartamentos();
   }, []);
@@ -91,6 +102,19 @@ const Bandeja = () => {
     }
   };
 
+  const handleDelete = async (id) => {
+    if (!window.confirm('¿Estás seguro de que deseas eliminar este documento permanentemente?')) return;
+    try {
+      const token = localStorage.getItem('token');
+      const config = { headers: { Authorization: `Bearer ${token}` } };
+      await axios.delete(`http://localhost:3001/documentos/${id}`, config);
+      fetchRegistros(); // Recargar la tabla
+    } catch (err) {
+      console.error('Error al eliminar', err);
+      alert(err.response?.data?.error || 'Error al eliminar el documento');
+    }
+  };
+
   return (
     <div className="max-w-6xl mx-auto relative">
       <h1 className="text-2xl font-bold mb-4 text-slate-800">Bandeja de Entrada</h1>
@@ -129,13 +153,22 @@ const Bandeja = () => {
                       </span>
                     </td>
                     <td className="p-3 text-sm text-slate-500">{new Date(r.createdAt).toLocaleDateString()}</td>
-                    <td className="p-3 text-center">
+                    <td className="p-3 text-center space-x-2">
                       <button 
                         onClick={() => abrirModal(r)}
                         className="bg-blue-50 text-blue-600 hover:bg-blue-600 hover:text-white px-3 py-1 rounded text-sm transition-colors"
                       >
                         Gestionar
                       </button>
+                      {userRole === 'administrador' && (
+                        <button 
+                          onClick={() => handleDelete(r._id)}
+                          className="bg-red-50 text-red-600 hover:bg-red-600 hover:text-white px-3 py-1 rounded text-sm transition-colors"
+                          title="Eliminar documento"
+                        >
+                          🗑️
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
