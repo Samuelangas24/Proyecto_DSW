@@ -80,7 +80,7 @@ const Reportes = () => {
       : registros;
 
     let contenido = 'REPORTE DE DOCUMENTOS\n';
-    contenido += '=' .repeat(80) + '\n';
+    contenido += '='.repeat(80) + '\n';
     contenido += `Fecha: ${new Date().toLocaleDateString('es-ES')}\n`;
     contenido += `Total de registros: ${registrosFiltrados.length}\n`;
     contenido += '='.repeat(80) + '\n\n';
@@ -100,6 +100,43 @@ const Reportes = () => {
     link.setAttribute('href', url);
     link.setAttribute('download', `reporte-documentos-${new Date().toISOString().split('T')[0]}.txt`);
     link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  // Función para descargar JSON
+  const descargarJSON = () => {
+    if (registros.length === 0) {
+      alert('No hay datos para descargar');
+      return;
+    }
+    
+    const registrosFiltrados = filtroEstado 
+      ? registros.filter(r => r.estado === filtroEstado)
+      : registros;
+
+    // Crear un objeto limpio para exportar
+    const datosExportar = {
+      generadoEl: new Date().toISOString(),
+      total: registrosFiltrados.length,
+      estadisticas: stats,
+      documentos: registrosFiltrados.map(r => ({
+        folio: r.folio,
+        remitente: r.remitente,
+        asunto: r.asunto,
+        estado: r.estado,
+        departamentoAsignado: r.departamentoAsignado?.nombre || 'Sin asignar',
+        fechaCreacion: r.createdAt
+      }))
+    };
+
+    const jsonString = JSON.stringify(datosExportar, null, 2);
+    const blob = new Blob([jsonString], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte-dsw-${new Date().toISOString().split('T')[0]}.json`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -155,6 +192,12 @@ const Reportes = () => {
             className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition"
           >
             📄 Descargar como TXT
+          </button>
+          <button 
+            onClick={descargarJSON}
+            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition"
+          >
+            {'{ }'} Descargar como JSON
           </button>
           <button 
             onClick={fetchData}
@@ -245,7 +288,7 @@ const Reportes = () => {
       )}
 
       {/* Remitentes Principales */}
-      {!loading && stats && Object.keys(stats.byRemitente).length > 0 && (
+      {!loading && stats && stats.byRemitente && Object.keys(stats.byRemitente).length > 0 && (
         <div className="bg-white rounded-lg shadow-lg p-6">
           <h2 className="text-2xl font-bold text-slate-800 mb-4">👥 Top Remitentes</h2>
           <div className="space-y-2">
