@@ -7,6 +7,10 @@ const Bandeja = () => {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState(null);
 
+  // Filtros
+  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filtroDepartamento, setFiltroDepartamento] = useState('');
+
   // Modal y selección
   const [selectedDoc, setSelectedDoc] = useState(null);
   const [historial, setHistorial] = useState([]);
@@ -115,12 +119,65 @@ const Bandeja = () => {
     }
   };
 
+  // Lógica de filtrado
+  const registrosFiltrados = registros.filter(r => {
+    const matchEstado = filtroEstado ? r.estado === filtroEstado : true;
+    const deptoId = r.departamentoAsignado?._id || r.departamentoAsignado || '';
+    const matchDepto = filtroDepartamento ? deptoId === filtroDepartamento : true;
+    return matchEstado && matchDepto;
+  });
+
   return (
-    <div className="max-w-6xl mx-auto relative">
-      <h1 className="text-2xl font-bold mb-4 text-slate-800">Bandeja de Entrada</h1>
-      <div className="bg-white p-4 rounded-lg shadow">
+    <div className="max-w-6xl mx-auto relative space-y-6">
+      <div className="flex justify-between items-center">
+        <h1 className="text-2xl font-bold text-slate-800">Bandeja de Entrada</h1>
+        <button onClick={fetchRegistros} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded shadow transition-colors">
+          ↻ Actualizar
+        </button>
+      </div>
+
+      {/* Panel de Filtros */}
+      <div className="bg-white p-4 rounded-lg shadow flex flex-col md:flex-row gap-4 items-center">
+        <div className="w-full md:w-1/3">
+          <label className="block text-sm font-medium text-slate-600 mb-1">Filtrar por Estado:</label>
+          <select 
+            value={filtroEstado} 
+            onChange={(e) => setFiltroEstado(e.target.value)}
+            className="w-full border border-slate-300 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Todos los estados</option>
+            <option value="Recibido">Recibido</option>
+            <option value="Turnado">Turnado</option>
+            <option value="En Atención">En Atención</option>
+            <option value="Atendido">Atendido</option>
+            <option value="Archivado">Archivado</option>
+          </select>
+        </div>
+        <div className="w-full md:w-1/3">
+          <label className="block text-sm font-medium text-slate-600 mb-1">Filtrar por Departamento:</label>
+          <select 
+            value={filtroDepartamento} 
+            onChange={(e) => setFiltroDepartamento(e.target.value)}
+            className="w-full border border-slate-300 rounded p-2 text-sm focus:ring-blue-500 focus:border-blue-500"
+          >
+            <option value="">Todos los departamentos</option>
+            <option value="sin_asignar">-- Sin asignar --</option>
+            {departamentos.map(d => (
+              <option key={d._id} value={d._id}>{d.nombre}</option>
+            ))}
+          </select>
+        </div>
+        <div className="w-full md:w-1/3 flex justify-end mt-4 md:mt-6">
+          <span className="text-sm font-medium text-slate-500 bg-slate-100 px-3 py-1 rounded-full">
+            Mostrando {registrosFiltrados.length} documento(s)
+          </span>
+        </div>
+      </div>
+
+      {/* Tabla de Documentos */}
+      <div className="bg-white rounded-lg shadow overflow-hidden">
         {loading ? (
-          <div className="text-center p-4">Cargando documentos...</div>
+          <div className="text-center p-8 text-slate-500">Cargando documentos...</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -129,20 +186,28 @@ const Bandeja = () => {
                   <th className="p-3">Folio</th>
                   <th className="p-3">Remitente</th>
                   <th className="p-3">Asunto</th>
+                  <th className="p-3">Área Asignada</th>
                   <th className="p-3">Estado</th>
                   <th className="p-3">Fecha</th>
                   <th className="p-3 text-center">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
-                {registros.length === 0 && (
-                  <tr><td colSpan={6} className="p-4 text-center text-slate-500">No hay documentos registrados</td></tr>
+                {registrosFiltrados.length === 0 && (
+                  <tr><td colSpan={7} className="p-8 text-center text-slate-500">No se encontraron documentos con estos filtros.</td></tr>
                 )}
-                {registros.map((r) => (
+                {registrosFiltrados.map((r) => (
                   <tr key={r._id} className="hover:bg-slate-50 transition-colors">
                     <td className="p-3 font-medium text-blue-600">{r.folio}</td>
                     <td className="p-3">{r.remitente}</td>
                     <td className="p-3 truncate max-w-xs">{r.asunto}</td>
+                    <td className="p-3 text-sm text-slate-600">
+                      {r.departamentoAsignado?.nombre ? (
+                        <span className="bg-purple-100 text-purple-700 px-2 py-1 rounded font-medium">{r.departamentoAsignado.nombre}</span>
+                      ) : (
+                        <span className="text-slate-400 italic">Sin asignar</span>
+                      )}
+                    </td>
                     <td className="p-3">
                       <span className={`px-2 py-1 rounded text-xs font-semibold 
                         ${r.estado === 'Recibido' ? 'bg-slate-100 text-slate-700' : 
@@ -176,11 +241,6 @@ const Bandeja = () => {
             </table>
           </div>
         )}
-        <div className="mt-4 flex justify-end">
-          <button onClick={fetchRegistros} className="bg-slate-800 hover:bg-slate-900 text-white px-4 py-2 rounded shadow transition-colors">
-            ↻ Actualizar Bandeja
-          </button>
-        </div>
       </div>
 
       {/* Modal de Gestión y Turnos */}

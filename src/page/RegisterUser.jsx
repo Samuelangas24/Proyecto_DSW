@@ -43,7 +43,7 @@ const RegisterUser = () => {
         headers: { Authorization: `Bearer ${token}` }
       };
       
-      const res = await axios.post('http://localhost:3001/auth/register', 
+      await axios.post('http://localhost:3001/auth/register', 
         { 
           email: form.email, 
           password: form.password, 
