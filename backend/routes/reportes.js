@@ -6,7 +6,7 @@ const router = express.Router();
 router.get('/', async (req, res) => {
     try {
         const total = await Registro.countDocuments();
-        
+
         const byEstadoAgg = await Registro.aggregate([
             { $group: { _id: '$estado', count: { $sum: 1 } } }
         ]);

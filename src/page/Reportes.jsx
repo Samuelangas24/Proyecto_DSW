@@ -1,22 +1,37 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import StatCard from '../components/StatCard';
+
+const getDepartamentoNombre = (registro) => (
+  registro.departamentoAsignado?.nombre ||
+  registro.departamento?.nombre ||
+  registro.departamento ||
+  'Sin asignar'
+);
 
 const Reportes = () => {
   const [stats, setStats] = useState(null);
   const [registros, setRegistros] = useState([]);
+  const [departamentos, setDepartamentos] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [filtroEstado, setFiltroEstado] = useState('');
+  const [filters, setFilters] = useState({
+    estadoDocumento: '',
+    departamento: '',
+    desde: '',
+    hasta: ''
+  });
 
   const fetchData = async () => {
     setLoading(true);
     try {
-      // Obtener estadísticas
-      const statsRes = await axios.get('http://localhost:3001/reportes');
+      const [statsRes, registrosRes, departamentosRes] = await Promise.all([
+        axios.get('http://localhost:3001/reportes'),
+        axios.get('http://localhost:3001/bandeja', { params: { limite: 1000 } }),
+        axios.get('http://localhost:3001/departamentos')
+      ]);
       setStats(statsRes.data.data);
-
-      // Obtener todos los registros
-      const registrosRes = await axios.get('http://localhost:3001/bandeja');
       setRegistros(registrosRes.data.data || []);
+      setDepartamentos(departamentosRes.data.data || []);
     } catch (err) {
       console.error('Error cargando reportes', err);
       setStats(null);
@@ -26,113 +41,119 @@ const Reportes = () => {
     }
   };
 
-  useEffect(() => { 
-    fetchData(); 
+  useEffect(() => {
+    fetchData();
   }, []);
 
-  // Función para descargar CSV
+  const filteredData = useMemo(() => {
+    return registros.filter((registro) => {
+      const fecha = new Date(registro.createdAt || registro.fecha);
+      const deptoId = registro.departamentoAsignado?._id || registro.departamentoAsignado || '';
+      const matchesEstado = filters.estadoDocumento ? registro.estado === filters.estadoDocumento : true;
+      const matchesDepto = filters.departamento ? deptoId === filters.departamento : true;
+      const matchesDesde = filters.desde ? fecha >= new Date(filters.desde) : true;
+      const matchesHasta = filters.hasta ? fecha <= new Date(`${filters.hasta}T23:59:59`) : true;
+      return matchesEstado && matchesDepto && matchesDesde && matchesHasta;
+    });
+  }, [registros, filters]);
+
+  const estadoCounts = useMemo(() => {
+    return registros.reduce((acc, registro) => {
+      const estado = registro.estado || 'Desconocido';
+      acc[estado] = (acc[estado] || 0) + 1;
+      return acc;
+    }, {});
+  }, [registros]);
+
+  const estados = useMemo(() => Object.keys(estadoCounts).sort(), [estadoCounts]);
+
+  const exportRows = () => filteredData.map((registro) => ({
+    folio: registro.folio || 'N/A',
+    remitente: registro.remitente || 'N/A',
+    asunto: registro.asunto || 'N/A',
+    estado: registro.estado || 'N/A',
+    departamento: getDepartamentoNombre(registro),
+    fecha: registro.createdAt ? new Date(registro.createdAt).toLocaleDateString('es-ES') : 'N/A'
+  }));
+
   const descargarCSV = () => {
-    if (registros.length === 0) {
+    const rows = exportRows();
+    if (rows.length === 0) {
       alert('No hay datos para descargar');
       return;
     }
 
-    // Encabezados
     const headers = ['Folio', 'Remitente', 'Asunto', 'Estado', 'Departamento', 'Fecha'];
-    
-    // Datos
-    const rows = registros.map(r => [
-      r.folio || 'N/A',
-      r.remitente || 'N/A',
-      r.asunto || 'N/A',
-      r.estado || 'N/A',
-      r.departamento?.nombre || 'N/A',
-      new Date(r.createdAt).toLocaleDateString('es-ES')
-    ]);
+    const csvRows = rows.map((row) => [
+      row.folio,
+      row.remitente,
+      row.asunto,
+      row.estado,
+      row.departamento,
+      row.fecha
+    ].map((cell) => `"${String(cell).replace(/"/g, '""')}"`).join(','));
 
-    // Crear CSV
-    let csv = headers.join(',') + '\n';
-    rows.forEach(row => {
-      csv += row.map(cell => `"${String(cell).replace(/"/g, '""')}"` ).join(',') + '\n';
-    });
-
-    // Descargar
-    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
-    const link = document.createElement('a');
+    const blob = new Blob([[headers.join(','), ...csvRows].join('\n')], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `reportes-${new Date().toISOString().split('T')[0]}.csv`);
-    link.style.visibility = 'hidden';
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reportes-${new Date().toISOString().split('T')[0]}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  // Función para descargar PDF (formato simple)
-  const descargarPDF = () => {
-    if (registros.length === 0) {
+  const descargarTXT = () => {
+    const rows = exportRows();
+    if (rows.length === 0) {
       alert('No hay datos para descargar');
       return;
     }
-
-    const registrosFiltrados = filtroEstado 
-      ? registros.filter(r => r.estado === filtroEstado)
-      : registros;
 
     let contenido = 'REPORTE DE DOCUMENTOS\n';
     contenido += '='.repeat(80) + '\n';
     contenido += `Fecha: ${new Date().toLocaleDateString('es-ES')}\n`;
-    contenido += `Total de registros: ${registrosFiltrados.length}\n`;
+    contenido += `Total de registros: ${rows.length}\n`;
     contenido += '='.repeat(80) + '\n\n';
 
-    registrosFiltrados.forEach((r, idx) => {
-      contenido += `${idx + 1}. Folio: ${r.folio}\n`;
-      contenido += `   Remitente: ${r.remitente}\n`;
-      contenido += `   Asunto: ${r.asunto}\n`;
-      contenido += `   Estado: ${r.estado}\n`;
-      contenido += `   Fecha: ${new Date(r.createdAt).toLocaleDateString('es-ES')}\n`;
+    rows.forEach((row, index) => {
+      contenido += `${index + 1}. Folio: ${row.folio}\n`;
+      contenido += `   Remitente: ${row.remitente}\n`;
+      contenido += `   Asunto: ${row.asunto}\n`;
+      contenido += `   Estado: ${row.estado}\n`;
+      contenido += `   Departamento: ${row.departamento}\n`;
+      contenido += `   Fecha: ${row.fecha}\n`;
       contenido += '-'.repeat(80) + '\n\n';
     });
 
     const blob = new Blob([contenido], { type: 'text/plain;charset=utf-8;' });
-    const link = document.createElement('a');
     const url = URL.createObjectURL(blob);
-    link.setAttribute('href', url);
-    link.setAttribute('download', `reporte-documentos-${new Date().toISOString().split('T')[0]}.txt`);
-    link.style.visibility = 'hidden';
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `reporte-documentos-${new Date().toISOString().split('T')[0]}.txt`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  // Función para descargar JSON
   const descargarJSON = () => {
-    if (registros.length === 0) {
+    const rows = exportRows();
+    if (rows.length === 0) {
       alert('No hay datos para descargar');
       return;
     }
-    
-    const registrosFiltrados = filtroEstado 
-      ? registros.filter(r => r.estado === filtroEstado)
-      : registros;
 
-    // Crear un objeto limpio para exportar
-    const datosExportar = {
+    const data = {
       generadoEl: new Date().toISOString(),
-      total: registrosFiltrados.length,
+      filtros: filters,
+      total: rows.length,
       estadisticas: stats,
-      documentos: registrosFiltrados.map(r => ({
-        folio: r.folio,
-        remitente: r.remitente,
-        asunto: r.asunto,
-        estado: r.estado,
-        departamentoAsignado: r.departamentoAsignado?.nombre || 'Sin asignar',
-        fechaCreacion: r.createdAt
-      }))
+      documentos: rows
     };
 
-    const jsonString = JSON.stringify(datosExportar, null, 2);
-    const blob = new Blob([jsonString], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
@@ -140,170 +161,177 @@ const Reportes = () => {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
-  const registrosFiltrados = filtroEstado 
-    ? registros.filter(r => r.estado === filtroEstado)
-    : registros;
-
-  const estados = [...new Set(registros.map(r => r.estado))].filter(Boolean);
+  const maxCount = Math.max(...Object.values(estadoCounts), 1);
 
   return (
-    <div className="max-w-7xl mx-auto space-y-6">
-      <div className="mb-6">
-        <h1 className="text-4xl font-bold text-slate-800 mb-2">📈 Reportes y Análisis</h1>
-        <p className="text-slate-600">Visualiza y descarga estadísticas del sistema</p>
+    <div className="mx-auto max-w-7xl space-y-6 p-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-end md:justify-between">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-900">Reportes y Analisis</h1>
+          <p className="mt-2 text-slate-500">Visualiza, filtra y descarga estadisticas del sistema.</p>
+        </div>
+        <button
+          onClick={fetchData}
+          disabled={loading}
+          className="rounded-3xl bg-slate-900 px-5 py-3 font-semibold text-white transition hover:bg-slate-800 disabled:opacity-50"
+        >
+          {loading ? 'Actualizando...' : 'Actualizar'}
+        </button>
       </div>
 
-      {/* Tarjetas de Estadísticas */}
-      {!loading && stats && (
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-          <div className="bg-gradient-to-br from-blue-500 to-blue-600 text-white rounded-lg p-6 shadow-lg">
-            <div className="text-4xl font-bold">{stats.total}</div>
-            <div className="text-sm opacity-90">Total de Documentos</div>
-          </div>
-          <div className="bg-gradient-to-br from-green-500 to-green-600 text-white rounded-lg p-6 shadow-lg">
-            <div className="text-4xl font-bold">{stats.byEstado?.['Recibido'] || 0}</div>
-            <div className="text-sm opacity-90">Recibidos</div>
-          </div>
-          <div className="bg-gradient-to-br from-amber-500 to-amber-600 text-white rounded-lg p-6 shadow-lg">
-            <div className="text-4xl font-bold">{stats.byEstado?.['En Proceso'] || 0}</div>
-            <div className="text-sm opacity-90">En Proceso</div>
-          </div>
-          <div className="bg-gradient-to-br from-purple-500 to-purple-600 text-white rounded-lg p-6 shadow-lg">
-            <div className="text-4xl font-bold">{stats.byEstado?.['Archivado'] || 0}</div>
-            <div className="text-sm opacity-90">Archivados</div>
-          </div>
-        </div>
-      )}
+      <div className="grid gap-6 md:grid-cols-4">
+        <StatCard title="Total" value={stats?.total || registros.length} color="bg-emerald-500" icon="DOC" />
+        <StatCard title="Recibidos" value={estadoCounts.Recibido || stats?.byEstado?.Recibido || 0} color="bg-sky-500" icon="IN" />
+        <StatCard title="Turnados" value={estadoCounts.Turnado || stats?.byEstado?.Turnado || 0} color="bg-amber-500" icon="GO" />
+        <StatCard title="Archivados" value={estadoCounts.Archivado || stats?.byEstado?.Archivado || 0} color="bg-slate-700" icon="OK" />
+      </div>
 
-      {/* Opciones de Descarga */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <h2 className="text-2xl font-bold text-slate-800 mb-4">💾 Descargar Reportes</h2>
-        <div className="flex flex-wrap gap-3">
-          <button 
-            onClick={descargarCSV}
-            className="bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-lg transition"
+      <div className="grid gap-4 rounded-3xl bg-white p-6 shadow lg:grid-cols-4">
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Desde</label>
+          <input
+            type="date"
+            value={filters.desde}
+            onChange={(e) => setFilters((prev) => ({ ...prev, desde: e.target.value }))}
+            className="w-full rounded-3xl border border-slate-200 px-4 py-3"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Hasta</label>
+          <input
+            type="date"
+            value={filters.hasta}
+            onChange={(e) => setFilters((prev) => ({ ...prev, hasta: e.target.value }))}
+            className="w-full rounded-3xl border border-slate-200 px-4 py-3"
+          />
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Departamento</label>
+          <select
+            value={filters.departamento}
+            onChange={(e) => setFilters((prev) => ({ ...prev, departamento: e.target.value }))}
+            className="w-full rounded-3xl border border-slate-200 px-4 py-3"
           >
-            📊 Descargar como CSV
-          </button>
-          <button 
-            onClick={descargarPDF}
-            className="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded-lg transition"
+            <option value="">Todos</option>
+            {departamentos.map((depto) => <option key={depto._id} value={depto._id}>{depto.nombre}</option>)}
+          </select>
+        </div>
+        <div className="space-y-2">
+          <label className="text-sm font-semibold text-slate-700">Estado</label>
+          <select
+            value={filters.estadoDocumento}
+            onChange={(e) => setFilters((prev) => ({ ...prev, estadoDocumento: e.target.value }))}
+            className="w-full rounded-3xl border border-slate-200 px-4 py-3"
           >
-            📄 Descargar como TXT
-          </button>
-          <button 
-            onClick={descargarJSON}
-            className="bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-lg transition"
-          >
-            {'{ }'} Descargar como JSON
-          </button>
-          <button 
-            onClick={fetchData}
-            disabled={loading}
-            className="bg-slate-600 hover:bg-slate-700 text-white font-bold py-2 px-4 rounded-lg transition disabled:opacity-50"
-          >
-            🔄 Actualizar
-          </button>
+            <option value="">Todos</option>
+            {estados.map((estado) => <option key={estado} value={estado}>{estado}</option>)}
+          </select>
         </div>
       </div>
 
-      {/* Tabla de Documentos */}
-      <div className="bg-white rounded-lg shadow-lg p-6">
-        <div className="flex justify-between items-center mb-4">
-          <h2 className="text-2xl font-bold text-slate-800">📋 Listado de Documentos</h2>
+      <div className="overflow-hidden rounded-3xl bg-white shadow">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-6 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-2">Filtrar por Estado:</label>
-            <select 
-              value={filtroEstado}
-              onChange={(e) => setFiltroEstado(e.target.value)}
-              className="border-2 border-slate-300 rounded-lg p-2 focus:outline-none focus:border-blue-500"
-            >
-              <option value="">Todos los estados ({registros.length})</option>
-              {estados.map(estado => (
-                <option key={estado} value={estado}>
-                  {estado} ({registros.filter(r => r.estado === estado).length})
-                </option>
-              ))}
-            </select>
+            <h2 className="text-xl font-semibold text-slate-900">Resultados del Reporte</h2>
+            <p className="text-sm text-slate-500">Total de registros: {filteredData.length}</p>
+          </div>
+          <div className="flex flex-wrap gap-3">
+            <button onClick={() => setFilters({ estadoDocumento: '', departamento: '', desde: '', hasta: '' })} className="rounded-3xl border border-slate-200 px-5 py-3 text-slate-700 hover:bg-slate-50">Limpiar Filtros</button>
+            <button onClick={descargarCSV} className="rounded-3xl bg-emerald-600 px-5 py-3 text-white hover:bg-emerald-700">CSV</button>
+            <button onClick={descargarTXT} className="rounded-3xl bg-red-600 px-5 py-3 text-white hover:bg-red-700">TXT</button>
+            <button onClick={descargarJSON} className="rounded-3xl bg-purple-600 px-5 py-3 text-white hover:bg-purple-700">JSON</button>
           </div>
         </div>
 
         {loading ? (
-          <div className="text-center p-8 text-slate-500">⏳ Cargando datos...</div>
-        ) : registrosFiltrados.length === 0 ? (
-          <div className="text-center p-8 text-slate-500">📭 No hay documentos para mostrar</div>
+          <div className="p-8 text-center text-slate-500">Cargando datos...</div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-sm">
-              <thead className="bg-slate-50 border-b-2 border-slate-300">
+            <table className="min-w-full text-left text-sm text-slate-700">
+              <thead className="bg-slate-50 text-xs uppercase text-slate-600">
                 <tr>
-                  <th className="p-4 font-bold text-slate-700">Folio</th>
-                  <th className="p-4 font-bold text-slate-700">Remitente</th>
-                  <th className="p-4 font-bold text-slate-700">Asunto</th>
-                  <th className="p-4 font-bold text-slate-700">Estado</th>
-                  <th className="p-4 font-bold text-slate-700">Departamento</th>
-                  <th className="p-4 font-bold text-slate-700">Fecha</th>
+                  <th className="p-4">Folio</th>
+                  <th className="p-4">Fecha</th>
+                  <th className="p-4">Remitente</th>
+                  <th className="p-4">Asunto</th>
+                  <th className="p-4">Departamento</th>
+                  <th className="p-4">Estado</th>
+                  <th className="p-4">Dias</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-slate-200">
-                {registrosFiltrados.map((r) => (
-                  <tr key={r._id} className="hover:bg-slate-50 transition">
-                    <td className="p-4 font-semibold text-blue-600">{r.folio}</td>
-                    <td className="p-4">{r.remitente}</td>
-                    <td className="p-4 truncate max-w-xs">{r.asunto}</td>
-                    <td className="p-4">
-                      <span className={`px-3 py-1 rounded-full text-xs font-semibold 
-                        ${r.estado === 'Recibido' ? 'bg-blue-100 text-blue-700' : 
-                          r.estado === 'En Proceso' ? 'bg-amber-100 text-amber-700' : 
-                          r.estado === 'Completado' ? 'bg-green-100 text-green-700' : 
-                          'bg-slate-100 text-slate-700'}`}>
-                        {r.estado}
-                      </span>
-                    </td>
-                    <td className="p-4">{r.departamento?.nombre || 'N/A'}</td>
-                    <td className="p-4 text-xs text-slate-500">{new Date(r.createdAt).toLocaleDateString('es-ES')}</td>
+              <tbody className="divide-y divide-slate-100">
+                {filteredData.length === 0 ? (
+                  <tr>
+                    <td colSpan="7" className="p-6 text-center text-slate-500">No hay registros que coincidan con los filtros.</td>
                   </tr>
-                ))}
+                ) : (
+                  filteredData.map((row) => (
+                    <tr key={row._id || row.folio} className="transition-colors hover:bg-slate-50">
+                      <td className="p-4 font-medium text-slate-900">{row.folio}</td>
+                      <td className="p-4 text-slate-500">{new Date(row.createdAt || row.fecha).toLocaleDateString()}</td>
+                      <td className="p-4">{row.remitente}</td>
+                      <td className="max-w-[22rem] truncate p-4">{row.asunto}</td>
+                      <td className="p-4">{getDepartamentoNombre(row)}</td>
+                      <td className="p-4">
+                        <span className={`inline-flex items-center rounded-full px-3 py-1 text-xs font-semibold ${
+                          row.estado === 'Recibido' ? 'bg-sky-100 text-sky-700' :
+                          row.estado === 'Turnado' ? 'bg-amber-100 text-amber-700' :
+                          row.estado === 'Atendido' ? 'bg-emerald-100 text-emerald-700' :
+                          'bg-slate-100 text-slate-700'
+                        }`}>
+                          {row.estado}
+                        </span>
+                      </td>
+                      <td className="p-4 text-slate-500">{Math.max(0, Math.floor((new Date() - new Date(row.createdAt || row.fecha)) / (1000 * 60 * 60 * 24)))}</td>
+                    </tr>
+                  ))
+                )}
               </tbody>
             </table>
           </div>
         )}
       </div>
 
-      {/* Resumen por Estado */}
-      {!loading && stats && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-slate-800 mb-4">📊 Resumen por Estado</h2>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            {Object.entries(stats.byEstado || {}).map(([estado, cantidad]) => (
-              <div key={estado} className="bg-gradient-to-br from-slate-50 to-slate-100 p-4 rounded-lg border border-slate-200">
-                <div className="text-2xl font-bold text-slate-800">{cantidad}</div>
-                <div className="text-sm text-slate-600">{estado}</div>
+      <div className="grid gap-6 lg:grid-cols-[1.6fr_1fr]">
+        <div className="rounded-3xl bg-white p-6 shadow">
+          <h3 className="mb-4 text-lg font-semibold">Distribucion por Estado</h3>
+          <div className="space-y-4">
+            {Object.entries(estadoCounts).map(([estado, count]) => (
+              <div key={estado}>
+                <div className="mb-1 flex justify-between text-sm">
+                  <span className="font-medium text-slate-700">{estado}</span>
+                  <span className="text-slate-500">{count}</span>
+                </div>
+                <div className="h-3 overflow-hidden rounded-full bg-slate-100">
+                  <div className="h-full rounded-full bg-slate-900" style={{ width: `${(count / maxCount) * 100}%` }} />
+                </div>
               </div>
             ))}
           </div>
         </div>
-      )}
 
-      {/* Remitentes Principales */}
-      {!loading && stats && stats.byRemitente && Object.keys(stats.byRemitente).length > 0 && (
-        <div className="bg-white rounded-lg shadow-lg p-6">
-          <h2 className="text-2xl font-bold text-slate-800 mb-4">👥 Top Remitentes</h2>
-          <div className="space-y-2">
-            {Object.entries(stats.byRemitente)
-              .sort(([, a], [, b]) => b - a)
-              .slice(0, 10)
-              .map(([remitente, cantidad]) => (
-                <div key={remitente} className="flex justify-between items-center p-3 bg-gradient-to-r from-blue-50 to-transparent rounded-lg border border-blue-100">
-                  <span className="font-medium text-slate-700">{remitente}</span>
-                  <span className="bg-blue-600 text-white px-3 py-1 rounded-full text-sm font-bold">{cantidad}</span>
-                </div>
-              ))}
-          </div>
+        <div className="rounded-3xl bg-white p-6 shadow">
+          <h3 className="mb-4 text-lg font-semibold">Top Remitentes</h3>
+          {stats?.byRemitente && Object.keys(stats.byRemitente).length > 0 ? (
+            <div className="space-y-2">
+              {Object.entries(stats.byRemitente)
+                .sort(([, a], [, b]) => b - a)
+                .slice(0, 10)
+                .map(([remitente, cantidad]) => (
+                  <div key={remitente} className="flex items-center justify-between rounded-2xl border border-slate-100 bg-slate-50 p-3">
+                    <span className="font-medium text-slate-700">{remitente}</span>
+                    <span className="rounded-full bg-slate-900 px-3 py-1 text-sm font-bold text-white">{cantidad}</span>
+                  </div>
+                ))}
+            </div>
+          ) : (
+            <p className="text-sm text-slate-500">Sin remitentes para mostrar.</p>
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 };
