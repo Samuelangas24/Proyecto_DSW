@@ -19,18 +19,18 @@ const RegisterUser = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    
+
     // Validaciones
     if (!form.email || !form.password || !form.confirmPassword) {
       setStatus({ ok: false, error: 'Todos los campos son requeridos' });
       return;
     }
-    
+
     if (form.password !== form.confirmPassword) {
       setStatus({ ok: false, error: 'Las contraseñas no coinciden' });
       return;
     }
-    
+
     if (form.password.length < 6) {
       setStatus({ ok: false, error: 'La contraseña debe tener al menos 6 caracteres' });
       return;
@@ -42,16 +42,16 @@ const RegisterUser = () => {
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };
-      
-      await axios.post('http://localhost:3001/auth/register', 
-        { 
-          email: form.email, 
-          password: form.password, 
-          role: form.role 
-        }, 
+
+      await axios.post('http://localhost:3001/auth/register',
+        {
+          email: form.email,
+          password: form.password,
+          role: form.role
+        },
         config
       );
-      
+
       setStatus('ok');
       setForm({ email: '', password: '', confirmPassword: '', role: 'oficialia' });
       setTimeout(() => {
@@ -76,10 +76,10 @@ const RegisterUser = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-8 space-y-6">
-        
+
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-2">📧 Email *</label>
-          <input 
+          <input
             type="email"
             name="email"
             value={form.email}
@@ -92,7 +92,7 @@ const RegisterUser = () => {
 
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-2">🔒 Contraseña *</label>
-          <input 
+          <input
             type="password"
             name="password"
             value={form.password}
@@ -105,7 +105,7 @@ const RegisterUser = () => {
 
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-2">🔒 Confirmar Contraseña *</label>
-          <input 
+          <input
             type="password"
             name="confirmPassword"
             value={form.confirmPassword}
@@ -118,7 +118,7 @@ const RegisterUser = () => {
 
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-2">👤 Rol *</label>
-          <select 
+          <select
             name="role"
             value={form.role}
             onChange={handleChange}
@@ -149,14 +149,14 @@ const RegisterUser = () => {
 
         {/* Botones de acción */}
         <div className="flex gap-3 pt-4">
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={status === 'enviando'}
             className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed text-lg"
           >
             {status === 'enviando' ? '⏳ Creando...' : '✅ Crear Usuario'}
           </button>
-          <button 
+          <button
             type="button"
             onClick={goBack}
             className="flex-1 bg-slate-400 hover:bg-slate-500 text-white font-bold py-3 rounded-lg transition text-lg"

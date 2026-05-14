@@ -2,12 +2,12 @@ import React, { useState } from 'react';
 import axios from 'axios';
 
 const Registro = () => {
-  const [form, setForm] = useState({ 
-    remitente: '', 
-    asunto: '', 
+  const [form, setForm] = useState({
+    remitente: '',
+    asunto: '',
     descripcion: '',
     departamento: 'Rectoría',
-    estado: 'Recibido' 
+    estado: 'Recibido'
   });
   const [status, setStatus] = useState(null);
 
@@ -28,7 +28,7 @@ const Registro = () => {
       const config = {
         headers: { Authorization: `Bearer ${token}` }
       };
-      
+
       const res = await axios.post('http://localhost:3001/registro', form, config);
       setStatus('ok');
       console.log('Respuesta backend:', res.data);
@@ -57,15 +57,15 @@ const Registro = () => {
       </div>
 
       <form onSubmit={handleSubmit} className="bg-white rounded-lg shadow-lg p-8 space-y-6">
-        
+
         {/* Primera fila */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">📧 Remitente *</label>
-            <input 
-              name="remitente" 
-              value={form.remitente} 
-              onChange={handleChange} 
+            <input
+              name="remitente"
+              value={form.remitente}
+              onChange={handleChange}
               placeholder="Ej: Juan Pérez"
               className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
               required
@@ -73,10 +73,10 @@ const Registro = () => {
           </div>
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">🏢 Departamento</label>
-            <select 
-              name="departamento" 
-              value={form.departamento} 
-              onChange={handleChange} 
+            <select
+              name="departamento"
+              value={form.departamento}
+              onChange={handleChange}
               className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             >
               <option>Rectoría</option>
@@ -92,10 +92,10 @@ const Registro = () => {
         {/* Asunto */}
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-2">📝 Asunto *</label>
-          <input 
-            name="asunto" 
-            value={form.asunto} 
-            onChange={handleChange} 
+          <input
+            name="asunto"
+            value={form.asunto}
+            onChange={handleChange}
             placeholder="Ej: Solicitud de información académica"
             className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             required
@@ -105,10 +105,10 @@ const Registro = () => {
         {/* Descripción */}
         <div>
           <label className="block text-sm font-bold text-slate-700 mb-2">📄 Descripción</label>
-          <textarea 
-            name="descripcion" 
-            value={form.descripcion} 
-            onChange={handleChange} 
+          <textarea
+            name="descripcion"
+            value={form.descripcion}
+            onChange={handleChange}
             placeholder="Detalles adicionales sobre el documento..."
             rows="5"
             className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
@@ -119,10 +119,10 @@ const Registro = () => {
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           <div>
             <label className="block text-sm font-bold text-slate-700 mb-2">⏱️ Estado</label>
-            <select 
-              name="estado" 
-              value={form.estado} 
-              onChange={handleChange} 
+            <select
+              name="estado"
+              value={form.estado}
+              onChange={handleChange}
               className="w-full border-2 border-slate-300 rounded-lg p-3 focus:outline-none focus:border-blue-500 focus:ring-2 focus:ring-blue-200"
             >
               <option>Recibido</option>
@@ -152,15 +152,15 @@ const Registro = () => {
 
         {/* Botones de acción */}
         <div className="flex gap-4 pt-4">
-          <button 
-            type="submit" 
+          <button
+            type="submit"
             disabled={status === 'enviando'}
             className="flex-1 bg-green-600 hover:bg-green-700 text-white font-bold py-3 rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed text-lg"
           >
             {status === 'enviando' ? '⏳ Guardando...' : '💾 Guardar Registro'}
           </button>
-          <button 
-            type="reset" 
+          <button
+            type="reset"
             onClick={handleReset}
             className="flex-1 bg-slate-400 hover:bg-slate-500 text-white font-bold py-3 rounded-lg transition text-lg"
           >

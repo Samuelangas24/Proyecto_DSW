@@ -31,14 +31,14 @@ const requireDepartmentAccess = async (req, res, next) => {
     try {
         if (!req.user) return res.status(401).json({ ok: false, error: 'Inicia sesión para continuar' });
         if (req.user.role === 'administrador' || req.user.role === 'oficialia') return next();
-        
+
         const usuario = await User.findById(req.user.id).populate('departamento');
         if (!usuario.departamento) return res.status(403).json({ ok: false, error: 'No tienes departamento asignado' });
-        
+
         if (req.params.id || req.params.folio) {
             const documentoId = req.params.id || req.params.folio;
             const documento = await Registro.findOne(req.params.folio ? { folio: documentoId } : { _id: documentoId });
-            
+
             if (!documento) return res.status(404).json({ ok: false, error: 'Documento no encontrado' });
             if (!documento.departamentoAsignado || documento.departamentoAsignado.toString() !== usuario.departamento._id.toString()) {
                 return res.status(403).json({ ok: false, error: 'No tienes permiso para ver este documento' });
