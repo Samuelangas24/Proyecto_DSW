@@ -1,4 +1,4 @@
-﻿import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import StatCard from '../components/StatCard';
 import { Link } from 'react-router-dom';
 
@@ -29,12 +29,6 @@ const Dashboard = () => {
     { id: 1, title: 'Revisar folio IEI-2023-0019', due: 'Hoy', status: 'Urgente' },
     { id: 2, title: 'Crear nuevo departamento de Admisiones', due: '2 días', status: 'Media' },
     { id: 3, title: 'Actualizar estado de documento IEI-2023-0020', due: '3 días', status: 'Baja' },
-  ]);
-
-  const [notifications] = useState([
-    { id: 1, text: 'Folio IEI-2023-0019 turnado a Depto. Sistemas', date: '20/Oct/2023 11:30' },
-    { id: 2, text: 'Folio IEI-2023-0018 archivado', date: '20/Oct/2023 10:45' },
-    { id: 3, text: 'Nuevo departamento creado: Recursos Humanos', date: '19/Oct/2023 16:00' },
   ]);
 
   const overdueCount = useMemo(() => recentDocuments.filter((item) => item.overdue).length, [recentDocuments]);
